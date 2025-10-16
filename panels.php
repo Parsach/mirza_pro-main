@@ -12,6 +12,7 @@ require_once __DIR__ . '/WGDashboard.php';
 require_once __DIR__ . '/s_ui.php';
 require_once __DIR__ . '/ibsng.php';
 require_once __DIR__ . '/mikrotik.php';
+require_once __DIR__ . '/3x-ui.php';
 
 class ManagePanel
 {
@@ -368,6 +369,45 @@ class ManagePanel
                 $Output['username'] = $usernameC;
                 $Output['subscription_url'] = $password;
                 $Output['configs'] = [];
+            }
+        } elseif ($Get_Data_Panel['type'] == "3x-ui") {
+            // 3x-ui panel integration
+            $subId = bin2hex(random_bytes(8));
+            if (isset($Get_Data_Product['inbounds']) and $Get_Data_Product['inbounds'] != null) {
+                $inbounds = $Get_Data_Product['inbounds'];
+            } else {
+                $inbounds = $Get_Data_Panel['inboundid'];
+            }
+            $data_Output = addClient_3xui($Get_Data_Panel['name_panel'], $usernameC, $expire, $data_limit, generateUUID(), "", $subId, $inbounds, $Get_Data_Product['name_product'], $note);
+            if (!empty($data_Output['error'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $data_Output['error']
+                );
+            } elseif (!empty($data_Output['status']) && $data_Output['status'] != 200) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $data_Output['status']
+                );
+            } else {
+                $data_Output = json_decode($data_Output['body'], true);
+                if (!$data_Output['success']) {
+                    $Output['status'] = 'Unsuccessful';
+                    $Output['msg'] = $data_Output['msg'];
+                } else {
+                    $links_user = outputlunk($Get_Data_Panel['linksubx'] . "/{$subId}");
+                    if (isBase64($links_user)) {
+                        $links_user = base64_decode($links_user);
+                    }
+                    $links_user = explode("\n", trim($links_user));
+                    $Output['status'] = 'successful';
+                    $Output['username'] = $usernameC;
+                    $Output['subscription_url'] = $Get_Data_Panel['linksubx'] . "/{$subId}";
+                    $Output['configs'] = $links_user;
+                    if ($inoice != false) {
+                        $Output['subscription_url'] = "https://$domainhosts/sub/" . $inoice['id_invoice'];
+                    }
+                }
             }
         } else {
             $Output['status'] = 'Unsuccessful';
@@ -870,6 +910,74 @@ class ManagePanel
                     'sub_last_user_agent' => null,
                 );
             }
+        } elseif ($Get_Data_Panel['type'] == "3x-ui") {
+            // 3x-ui panel data retrieval
+            $user_data = getClientTraffic_3xui($Get_Data_Panel['name_panel'], $username);
+            if (!empty($user_data['error'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $user_data['error']
+                );
+            } elseif (!empty($user_data['status']) && $user_data['status'] != 200) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => json_encode($user_data)
+                );
+            }
+            $user_data = json_decode($user_data['body'], true);
+            
+            if (!is_array($user_data)) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => 'object invalid'
+                );
+            }
+            if (empty($user_data['obj'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => "User not found"
+                );
+            }
+            $user_data = $user_data['obj'];
+            $expire = $user_data['expiryTime'] / 1000;
+            if ($user_data['enable']) {
+                $user_data['enable'] = "active";
+            } else {
+                $user_data['enable'] = "disabled";
+            }
+            if ((intval($user_data['total'])) != 0) {
+                if ((intval($user_data['total']) - ($user_data['up'] + $user_data['down'])) <= 0)
+                    $user_data['enable'] = "limited";
+            }
+            if (intval($user_data['expiryTime']) != 0) {
+                if ($expire - time() <= 0)
+                    $user_data['enable'] = "expired";
+            }
+            if ($user_data['expiryTime'] < -10000) {
+                $user_data['enable'] = "on_hold";
+                $expire = 0;
+            }
+            $linksub = $Get_Data_Panel['linksubx'] . "/{$user_data['subId']}";
+            $links_user = outputlunk($Get_Data_Panel['linksubx'] . "/{$user_data['subId']}");
+            if (isBase64($links_user))
+                $links_user = base64_decode($links_user);
+            $links_user = explode("\n", trim($links_user));
+            if ($inoice != false)
+                $linksub = "https://$domainhosts/sub/" . $inoice['id_invoice'];
+            $user_data['lastOnline'] = $user_data['lastOnline'] == 0 ? "offline" : date('Y-m-d H:i:s', $user_data['lastOnline'] / 1000);
+            $Output = array(
+                'status' => $user_data['enable'],
+                'username' => $user_data['email'],
+                'data_limit' => $user_data['total'],
+                'expire' => $expire,
+                'online_at' => $user_data['lastOnline'],
+                'used_traffic' => $user_data['up'] + $user_data['down'],
+                'links' => $links_user,
+                'subscription_url' => $linksub,
+                'sub_updated_at' => null,
+                'sub_last_user_agent' => null,
+                'uuid' => $user_data['uuid']
+            );
         } else {
             $Output = array(
                 'status' => 'Unsuccessful',
@@ -1225,6 +1333,48 @@ class ManagePanel
                     'username' => $username,
                 );
             }
+        } elseif ($Get_Data_Panel['type'] == "3x-ui") {
+            // Get user data first to find UUID
+            $user_data = getClientTraffic_3xui($Get_Data_Panel['name_panel'], $username);
+            if (!empty($user_data['error'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $user_data['error']
+                );
+            }
+            $user_data = json_decode($user_data['body'], true);
+            if (empty($user_data['obj'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => "User not found"
+                );
+            }
+            
+            // Delete client using UUID
+            $UsernameData = deleteClient_3xui($Get_Data_Panel['name_panel'], $user_data['obj']['uuid']);
+            if (!empty($UsernameData['status']) && $UsernameData['status'] != 200) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $UsernameData['status']
+                );
+            } elseif (!empty($UsernameData['error'])) {
+                return array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $UsernameData['error']
+                );
+            }
+            $UsernameData = json_decode($UsernameData['body'], true);
+            if (!$UsernameData['success']) {
+                $Output = array(
+                    'status' => 'Unsuccessful',
+                    'msg' => $UsernameData['msg']
+                );
+            } else {
+                $Output = array(
+                    'status' => 'successful',
+                    'username' => $username,
+                );
+            }
         } else {
             $Output = array(
                 'status' => 'Unsuccessful',
@@ -1486,6 +1636,98 @@ class ManagePanel
                 'status' => true,
                 'data' => $modify
             );
+        } elseif ($Get_Data_Panel['type'] == "3x-ui") {
+            // Get client data first
+            $clients = getClientTraffic_3xui($Get_Data_Panel['name_panel'], $username);
+            if (!empty($clients['error'])) {
+                return array(
+                    'status' => false,
+                    'msg' => $clients['error']
+                );
+            } elseif (!empty($clients['status']) && $clients['status'] != 200) {
+                return array(
+                    'status' => false,
+                    'msg' => json_encode($clients)
+                );
+            }
+            $clients = json_decode($clients['body'], true);
+            if (!is_array($clients)) {
+                return array(
+                    'status' => false,
+                    'msg' => 'object invalid'
+                );
+            }
+            if (empty($clients['obj'])) {
+                return array(
+                    'status' => false,
+                    'msg' => "User not found"
+                );
+            }
+            $clients = $clients['obj'];
+            
+            // Prepare update config
+            $updateConfig = array();
+            
+            // Map common config fields to 3x-ui format
+            if (isset($config['settings'])) {
+                $settings = json_decode($config['settings'], true);
+                if (isset($settings['clients'][0])) {
+                    $clientSettings = $settings['clients'][0];
+                    if (isset($clientSettings['enable'])) {
+                        $updateConfig['enable'] = $clientSettings['enable'];
+                    }
+                    if (isset($clientSettings['totalGB'])) {
+                        $updateConfig['totalGB'] = $clientSettings['totalGB'];
+                    }
+                    if (isset($clientSettings['expiryTime'])) {
+                        $updateConfig['expiryTime'] = $clientSettings['expiryTime'];
+                    }
+                    if (isset($clientSettings['email'])) {
+                        $updateConfig['email'] = $clientSettings['email'];
+                    }
+                    if (isset($clientSettings['limitIp'])) {
+                        $updateConfig['limitIp'] = $clientSettings['limitIp'];
+                    }
+                    if (isset($clientSettings['reset'])) {
+                        $updateConfig['reset'] = $clientSettings['reset'];
+                    }
+                }
+            }
+            
+            // Direct config fields
+            if (isset($config['status'])) {
+                $updateConfig['enable'] = ($config['status'] == 'active' || $config['status'] == 'enabled');
+            }
+            if (isset($config['data_limit'])) {
+                $updateConfig['totalGB'] = $config['data_limit'];
+            }
+            if (isset($config['expire'])) {
+                $updateConfig['expiryTime'] = $config['expire'] * 1000;
+            }
+            
+            $modify = updateClient_3xui($Get_Data_Panel['name_panel'], $clients['uuid'], $updateConfig);
+            if (!empty($modify['error'])) {
+                return array(
+                    'status' => false,
+                    'msg' => $modify['error']
+                );
+            } elseif (!empty($modify['status']) && $modify['status'] != 200) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error code : ' . $modify['status']
+                );
+            }
+            $modify = json_decode($modify['body'], true);
+            if (!$modify['success']) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error :' . $modify['msg']
+                );
+            }
+            return array(
+                'status' => true,
+                'data' => $modify
+            );
         }
     }
     function Change_status($username, $name_panel)
@@ -1581,6 +1823,26 @@ class ManagePanel
                 $status = true;
             }
             $configs = array("enable" => $status);
+            $ManagePanel->Modifyuser($username, $name_panel, $configs);
+            $Output = array(
+                'status' => 'successful',
+                'msg' => null
+            );
+        } elseif ($Get_Data_Panel['type'] == "3x-ui") {
+            if ($DataUserOut['status'] == "active") {
+                $status = false;
+            } else {
+                $status = true;
+            }
+            $configs = array(
+                'settings' => json_encode(array(
+                    'clients' => array(
+                        array(
+                            "enable" => $status,
+                        )
+                    ),
+                )),
+            );
             $ManagePanel->Modifyuser($username, $name_panel, $configs);
             $Output = array(
                 'status' => 'successful',
@@ -1723,6 +1985,47 @@ class ManagePanel
             ResetUserDataUsages_ui($username, $name_panel);
             return array(
                 'status' => true
+            );
+        } elseif ($panel['type'] == "3x-ui") {
+            // Get user data first to find inbound ID
+            $user_data = getClientTraffic_3xui($panel['name_panel'], $username);
+            if (!empty($user_data['error'])) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error: ' . $user_data['error']
+                );
+            }
+            $user_data = json_decode($user_data['body'], true);
+            if (empty($user_data['obj'])) {
+                return array(
+                    'status' => false,
+                    'msg' => "User not found"
+                );
+            }
+            
+            // Reset traffic using the reset endpoint
+            $reset = resetClientTraffic_3xui($panel['name_panel'], $username, $user_data['obj']['inboundId']);
+            if (!empty($reset['status']) && $reset['status'] != 200) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error code : ' . $reset['status']
+                );
+            } elseif (!empty($reset['error'])) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error  : ' . $reset['error']
+                );
+            }
+            $reset = json_decode($reset['body'], true);
+            if (!$reset['success']) {
+                return array(
+                    'status' => false,
+                    'msg' => 'error :' . $reset['msg']
+                );
+            }
+            return array(
+                'status' => true,
+                'msg' => 'successful'
             );
         }
     }
