@@ -58,7 +58,7 @@
 
 ```bash
 # 1. کلون کردن پروژه
-git clone https://github.com/yourusername/mirza_pro.git
+git clone https://github.com/Parsach/mirza_pro.git
 cd mirza_pro
 
 # 2. نصب وابستگی‌ها
