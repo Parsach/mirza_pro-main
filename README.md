@@ -58,7 +58,7 @@
 
 ```bash
 # 1. کلون کردن پروژه
-git clone https://github.com/yourusername/mirza_pro.git
+git clone https://github.com/Parsach/mirza_pro-main.git
 cd mirza_pro
 
 # 2. نصب وابستگی‌ها
@@ -119,6 +119,7 @@ $usernamebot = 'your_bot_username';      // یوزرنیم ربات
 | Marzban | v0.4.0+ | ✅ کامل |
 | Marzneshin | All | ✅ کامل |
 | X-UI Alireza | All | ✅ کامل |
+| 3X-UI | All | ✅ کامل |
 | Hiddify | Latest | ✅ کامل |
 | S-UI | All | ✅ کامل |
 | WireGuard | Dashboard | ✅ کامل |
