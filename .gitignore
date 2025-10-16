@@ -1,0 +1,60 @@
+# Composer
+/vendor/
+composer.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+error_log
+/logs/
+
+# Cache and temporary files
+/cache/
+/tmp/
+*.cache
+cookie.txt
+3xui_cookie.txt
+
+# Database
+*.sql
+*.sqlite
+*.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Config files with sensitive data
+config.local.php
+
+# User uploads
+/uploads/
+/files/
+
+# Session files
+/sessions/
+
+# Testing
+/phpunit.xml
+.phpunit.result.cache
+/coverage/
+
+# Build files
+/build/
+/dist/
